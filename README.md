@@ -36,29 +36,41 @@ Open http://localhost:3000 — login with `admin` / `1`
 
 ```
 ├── server/
-│   ├── index.ts          Express server, Vite SSR middleware
-│   ├── routes.ts         All API routes + RBAC helpers
-│   └── db.ts             SQLite schema + seed
+│   ├── index.ts           Entry: Express + Vite SSR dev/prod
+│   ├── config.ts          Constants, paths, env defaults
+│   ├── types.ts           Shared types + session augmentation
+│   ├── db.ts              Database connection
+│   ├── schema.ts          Table creation + seed data
+│   ├── middleware.ts      Session + requireAuth middleware
+│   ├── services/
+│   │   ├── navbar.ts      Navbar config read/write, menu filtering
+│   │   └── rbac.ts        RBAC queries (getUserMenus, getFullUser)
+│   └── routes/
+│       ├── index.ts       Route aggregator
+│       ├── auth.ts        POST /login, POST /logout, GET /me
+│       ├── navbar.ts      GET|PUT /navbar-config, GET /navbar
+│       ├── users.ts       CRUD /users + role assignment
+│       └── roles.ts       CRUD /roles + menu permissions
 ├── src/
-│   ├── entry-client.ts   Browser entry (hydration)
-│   ├── entry-server.ts   Server-side render function
-│   ├── main.ts           Universal app factory (auth guard)
-│   ├── router.ts         Vue Router config
-│   ├── App.vue           Root layout
-│   ├── stores/auth.ts    Reactive auth store
+│   ├── entry-client.ts    Browser entry (hydration)
+│   ├── entry-server.ts    Server-side render function
+│   ├── main.ts            Universal app factory (auth guard)
+│   ├── router.ts          Vue Router config
+│   ├── App.vue            Root layout
+│   ├── stores/auth.ts     Reactive auth store
 │   ├── pages/
 │   │   ├── Login.vue
 │   │   ├── Dashboard.vue
 │   │   ├── Settings.vue
-│   │   └── Management.vue     Tab container
+│   │   └── Management.vue      Tab container with router-view
 │   └── components/
 │       ├── Navbar.vue          Multi-level dropdown navbar
 │       ├── MenuTree.vue        Recursive menu checkboxes
 │       ├── UserManagement.vue  User CRUD
 │       └── RoleManagement.vue  Role CRUD + menu picker
-├── navbar.json           Master menu config (editable)
-├── .env                  Environment config
-├── index.html            HTML template
+├── navbar.json            Master menu config (editable via UI)
+├── .env                   Environment config
+├── index.html             HTML template
 ├── tailwind.config.cjs
 └── postcss.config.cjs
 ```
