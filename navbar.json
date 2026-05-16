@@ -1,5 +1,11 @@
 [
   { "label": "Dashboard", "path": "/" },
-  { "label": "Settings", "path": "/settings" },
-  { "label": "Management", "path": "/management" }
+  {
+    "label": "Management",
+    "children": [
+      { "label": "Users", "path": "/management/users" },
+      { "label": "Roles", "path": "/management/roles" }
+    ]
+  },
+  { "label": "Settings", "path": "/settings" }
 ]

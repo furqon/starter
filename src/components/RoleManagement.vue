@@ -39,7 +39,11 @@
       </table>
     </div>
 
-    <div v-if="editTarget" class="fixed inset-0 bg-black/20 flex items-center justify-center z-50" @click.self="editTarget = null">
+    <div
+      v-if="editTarget"
+      class="fixed inset-0 bg-black/20 flex items-center justify-center z-50"
+      @click.self="editTarget = null"
+    >
       <div class="bg-white rounded-lg border border-gray-200 p-5 w-full max-w-sm mx-4 shadow-lg">
         <h2 class="text-sm font-semibold text-gray-900 mb-4">
           {{ editTarget.id ? 'Edit Role' : 'Add Role' }}
@@ -47,30 +51,41 @@
         <form @submit.prevent="saveRole" class="space-y-3">
           <div>
             <label class="block text-xs font-medium text-gray-600 mb-1">Name</label>
-            <input v-model="editForm.name" type="text" class="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent" />
+            <input
+              v-model="editForm.name"
+              type="text"
+              class="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            />
           </div>
           <div>
             <label class="block text-xs font-medium text-gray-600 mb-1">Description</label>
-            <input v-model="editForm.description" type="text" class="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent" />
+            <input
+              v-model="editForm.description"
+              type="text"
+              class="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            />
           </div>
           <div>
             <label class="block text-xs font-medium text-gray-600 mb-2">Menu Access</label>
-            <div class="space-y-1.5 max-h-40 overflow-y-auto">
-              <label v-for="item in masterMenus" :key="item.path" class="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
-                <input
-                  type="checkbox"
-                  :checked="editMenus.includes(item.path)"
-                  @change="toggleMenu(item.path)"
-                  class="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                />
-                {{ item.label }}
-              </label>
+            <div class="max-h-48 overflow-y-auto border border-gray-100 rounded-md p-2">
+              <MenuTree :items="masterMenus" :selected="editPaths" @toggle="togglePath" />
             </div>
           </div>
           <p v-if="editError" class="text-red-500 text-xs">{{ editError }}</p>
           <div class="flex justify-end gap-2 pt-1">
-            <button type="button" @click="editTarget = null" class="text-sm px-3 py-1.5 text-gray-600 hover:text-gray-900">Cancel</button>
-            <button type="submit" class="text-sm px-3 py-1.5 bg-blue-600 text-white rounded-md hover:bg-blue-700">Save</button>
+            <button
+              type="button"
+              @click="editTarget = null"
+              class="text-sm px-3 py-1.5 text-gray-600 hover:text-gray-900"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              class="text-sm px-3 py-1.5 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+            >
+              Save
+            </button>
           </div>
         </form>
       </div>
@@ -80,12 +95,13 @@
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
+import MenuTree from './MenuTree.vue'
 
 const roles = ref<any[]>([])
-const masterMenus = ref<{ label: string; path: string }[]>([])
+const masterMenus = ref<any[]>([])
 const editTarget = ref<any>(null)
 const editForm = ref({ name: '', description: '' })
-const editMenus = ref<string[]>([])
+const editPaths = ref<string[]>([])
 const editError = ref('')
 
 async function load() {
@@ -105,19 +121,31 @@ async function openEdit(role: any) {
     const res = await fetch(`/api/roles/${role.id}/menus`)
     if (res.ok) {
       const data = await res.json()
-      editMenus.value = data.menus.map((m: any) => m.path)
+      editPaths.value = collectChecked(data.items)
     }
   } else {
     editTarget.value = { id: null }
     editForm.value = { name: '', description: '' }
-    editMenus.value = []
+    editPaths.value = []
   }
 }
 
-function toggleMenu(path: string) {
-  const idx = editMenus.value.indexOf(path)
-  if (idx === -1) editMenus.value.push(path)
-  else editMenus.value.splice(idx, 1)
+function collectChecked(items: any[]): string[] {
+  const paths: string[] = []
+  for (const item of items) {
+    if (item.children) {
+      paths.push(...collectChecked(item.children))
+    } else if (item.checked) {
+      paths.push(item.path)
+    }
+  }
+  return paths
+}
+
+function togglePath(path: string) {
+  const idx = editPaths.value.indexOf(path)
+  if (idx === -1) editPaths.value.push(path)
+  else editPaths.value.splice(idx, 1)
 }
 
 async function saveRole() {
@@ -136,7 +164,7 @@ async function saveRole() {
     await fetch(`/api/roles/${editTarget.value.id}/menus`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ paths: editMenus.value }),
+      body: JSON.stringify({ paths: editPaths.value }),
     })
   } else {
     const res = await fetch('/api/roles', {
@@ -149,7 +177,7 @@ async function saveRole() {
     await fetch(`/api/roles/${data.role.id}/menus`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ paths: editMenus.value }),
+      body: JSON.stringify({ paths: editPaths.value }),
     })
   }
   editTarget.value = null

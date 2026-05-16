@@ -70,7 +70,7 @@ if (!hasRole) {
 
 const adminMenuCount = db.prepare('SELECT COUNT(*) as count FROM role_menus WHERE role_id = ?').get(adminRole.id) as any
 if (adminMenuCount.count === 0) {
-  const allPaths = ['/', '/settings', '/management']
+  const allPaths = ['/', '/settings', '/management/users', '/management/roles']
   const insert = db.prepare('INSERT OR IGNORE INTO role_menus (role_id, menu_path) VALUES (?, ?)')
   for (const p of allPaths) {
     insert.run(adminRole.id, p)

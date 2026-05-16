@@ -17,12 +17,39 @@ export function getNavbarConfig() {
   return JSON.parse(fs.readFileSync(p, 'utf-8'))
 }
 
+function filterMenuItems(items: any[], allowedSet: Set<string>): any[] {
+  const result: any[] = []
+  for (const item of items) {
+    if (item.children) {
+      const filtered = filterMenuItems(item.children, allowedSet)
+      if (filtered.length > 0) {
+        result.push({ label: item.label, children: filtered })
+      }
+    } else if (item.path && allowedSet.has(item.path)) {
+      result.push({ ...item })
+    }
+  }
+  return result
+}
+
+function collectLeafPaths(items: any[]): string[] {
+  const paths: string[] = []
+  for (const item of items) {
+    if (item.children) {
+      paths.push(...collectLeafPaths(item.children))
+    } else if (item.path) {
+      paths.push(item.path)
+    }
+  }
+  return paths
+}
+
 export function getUserMenus(userId: number) {
   const row = db.prepare('SELECT role_id FROM user_roles WHERE user_id = ?').get(userId) as any
   if (!row) return []
   const allowed = db.prepare('SELECT menu_path FROM role_menus WHERE role_id = ?').all(row.role_id) as any[]
   const allowedSet = new Set(allowed.map((r) => r.menu_path))
-  return getNavbarConfig().filter((item: any) => allowedSet.has(item.path))
+  return filterMenuItems(getNavbarConfig(), allowedSet)
 }
 
 export function getUserRole(userId: number) {
@@ -38,6 +65,22 @@ export function getFullUser(userId: number) {
   const role = getUserRole(user.id)
   const menus = getUserMenus(user.id)
   return { id: user.id, username: user.username, role, menus }
+}
+
+function getRoleMenusWithChecked(roleId: number) {
+  const paths = db.prepare('SELECT menu_path FROM role_menus WHERE role_id = ?').all(roleId) as any[]
+  const allowedSet = new Set(paths.map((p: any) => p.menu_path))
+  const master = getNavbarConfig()
+
+  function mark(items: any[]): any[] {
+    return items.map((item) => {
+      if (item.children) {
+        return { label: item.label, children: mark(item.children) }
+      }
+      return { ...item, checked: allowedSet.has(item.path) }
+    })
+  }
+  return mark(master)
 }
 
 const router = Router()
@@ -181,10 +224,7 @@ router.delete('/roles/:id', (req, res) => {
 
 router.get('/roles/:id/menus', (req, res) => {
   const roleId = Number(req.params.id)
-  const paths = db.prepare('SELECT menu_path FROM role_menus WHERE role_id = ?').all(roleId) as any[]
-  const master = getNavbarConfig()
-  const menus = master.filter((m: any) => paths.some((p: any) => p.menu_path === m.path))
-  res.json({ menus })
+  res.json({ items: getRoleMenusWithChecked(roleId) })
 })
 
 router.put('/roles/:id/menus', (req, res) => {

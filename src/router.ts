@@ -26,9 +26,24 @@ export function createRouter() {
       },
       {
         path: '/management',
-        name: 'Management',
         component: () => import('./pages/Management.vue'),
         meta: { requiresAuth: true },
+        children: [
+          {
+            path: '',
+            redirect: { name: 'ManagementUsers' },
+          },
+          {
+            path: 'users',
+            name: 'ManagementUsers',
+            component: () => import('./components/UserManagement.vue'),
+          },
+          {
+            path: 'roles',
+            name: 'ManagementRoles',
+            component: () => import('./components/RoleManagement.vue'),
+          },
+        ],
       },
       {
         path: '/login',
