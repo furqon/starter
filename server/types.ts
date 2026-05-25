@@ -5,6 +5,8 @@ export interface MenuItem {
   path?: string
   children?: MenuItem[]
   checked?: boolean
+  actions?: string[]
+  allowedActions?: string[]
 }
 
 export interface SessionUser {

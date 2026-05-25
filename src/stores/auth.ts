@@ -4,7 +4,7 @@ export type User = {
   id: number
   username: string
   role: { id: number; name: string } | null
-  menus: { label: string; path: string }[]
+  menus: { label: string; path?: string; children?: any[]; allowedActions?: string[] }[]
 } | null
 
 export function createAuthStore() {

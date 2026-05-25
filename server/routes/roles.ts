@@ -5,12 +5,12 @@ import { getRoleMenusWithChecked } from '../services/rbac.js'
 
 const router = Router()
 
-router.get('/roles', requireAuth, (_req, res) => {
-  const roles = db.prepare('SELECT * FROM roles ORDER BY id').all()
+router.get('/roles', requireAuth, async (_req, res) => {
+  const roles = await db.role.findMany({ orderBy: { id: 'asc' } })
   res.json({ roles })
 })
 
-router.post('/roles', requireAuth, (req, res) => {
+router.post('/roles', requireAuth, async (req, res) => {
   const { name, description } = req.body
 
   if (!name) {
@@ -18,72 +18,73 @@ router.post('/roles', requireAuth, (req, res) => {
     return
   }
 
-  const result = db
-    .prepare('INSERT INTO roles (name, description) VALUES (?, ?)')
-    .run(name, description || '')
+  const role = await db.role.create({
+    data: { name, description: description || '' },
+  })
 
   res.json({
     success: true,
     role: {
-      id: result.lastInsertRowid,
-      name,
-      description: description || '',
+      id: role.id,
+      name: role.name,
+      description: role.description,
     },
   })
 })
 
-router.put('/roles/:id', requireAuth, (req, res) => {
+router.put('/roles/:id', requireAuth, async (req, res) => {
   const id = Number(req.params.id)
   const { name, description } = req.body
 
-  db.prepare('UPDATE roles SET name = ?, description = ? WHERE id = ?').run(
-    name,
-    description || '',
-    id
-  )
+  await db.role.update({
+    where: { id },
+    data: { name, description: description || '' },
+  })
 
   res.json({ success: true })
 })
 
-router.delete('/roles/:id', requireAuth, (req, res) => {
+router.delete('/roles/:id', requireAuth, async (req, res) => {
   const id = Number(req.params.id)
 
-  const assigned = db
-    .prepare('SELECT COUNT(*) as count FROM user_roles WHERE role_id = ?')
-    .get(id) as any
+  const assigned = await db.userRole.count({ where: { roleId: id } })
 
-  if (assigned.count > 0) {
+  if (assigned > 0) {
     res
       .status(400)
       .json({ success: false, message: 'Role has assigned users' })
     return
   }
 
-  db.prepare('DELETE FROM roles WHERE id = ?').run(id)
+  await db.role.delete({ where: { id } })
   res.json({ success: true })
 })
 
-router.get('/roles/:id/menus', requireAuth, (req, res) => {
+router.get('/roles/:id/menus', requireAuth, async (req, res) => {
   const roleId = Number(req.params.id)
-  res.json({ items: getRoleMenusWithChecked(roleId) })
+  res.json({ items: await getRoleMenusWithChecked(roleId) })
 })
 
-router.put('/roles/:id/menus', requireAuth, (req, res) => {
+router.put('/roles/:id/menus', requireAuth, async (req, res) => {
   const roleId = Number(req.params.id)
-  const { paths } = req.body
+  const { menus } = req.body
 
-  if (!Array.isArray(paths)) {
-    res.status(400).json({ success: false, message: 'paths must be an array' })
+  if (!Array.isArray(menus)) {
+    res.status(400).json({ success: false, message: 'menus must be an array' })
     return
   }
 
-  db.prepare('DELETE FROM role_menus WHERE role_id = ?').run(roleId)
-  const insert = db.prepare(
-    'INSERT INTO role_menus (role_id, menu_path) VALUES (?, ?)'
-  )
-  for (const p of paths) {
-    insert.run(roleId, p)
-  }
+  await db.$transaction([
+    db.roleMenu.deleteMany({ where: { roleId } }),
+    db.roleMenu.createMany({
+      data: menus.map((m: { path: string; actions?: string[] }) => ({
+        roleId,
+        menuPath: m.path,
+        actions: m.actions ?? [],
+      })),
+      skipDuplicates: true,
+    }),
+  ])
 
   res.json({ success: true })
 })

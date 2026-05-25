@@ -4,21 +4,33 @@ import { requireAuth } from '../middleware.js'
 
 const router = Router()
 
-router.get('/users', requireAuth, (req, res) => {
-  const users = db
-    .prepare(
-      `SELECT u.id, u.username, u.created_at,
-              r.id as role_id, r.name as role_name
-       FROM users u
-       LEFT JOIN user_roles ur ON ur.user_id = u.id
-       LEFT JOIN roles r ON r.id = ur.role_id
-       ORDER BY u.id`
-    )
-    .all()
+router.get('/users', requireAuth, async (_req, res) => {
+  const rows = await db.user.findMany({
+    orderBy: { id: 'asc' },
+    select: {
+      id: true,
+      username: true,
+      createdAt: true,
+      roles: {
+        take: 1,
+        select: { role: { select: { id: true, name: true } } },
+      },
+    },
+  })
+  const users = rows.map((user) => {
+    const role = user.roles[0]?.role
+    return {
+      id: user.id,
+      username: user.username,
+      created_at: user.createdAt,
+      role_id: role?.id ?? null,
+      role_name: role?.name ?? null,
+    }
+  })
   res.json({ users })
 })
 
-router.post('/users', requireAuth, (req, res) => {
+router.post('/users', requireAuth, async (req, res) => {
   const { username, password, role_id } = req.body
 
   if (!username || !password) {
@@ -28,33 +40,26 @@ router.post('/users', requireAuth, (req, res) => {
     return
   }
 
-  const existing = db
-    .prepare('SELECT id FROM users WHERE username = ?')
-    .get(username)
+  const existing = await db.user.findUnique({ where: { username } })
   if (existing) {
     res.status(409).json({ success: false, message: 'Username already exists' })
     return
   }
 
-  const result = db
-    .prepare('INSERT INTO users (username, password) VALUES (?, ?)')
-    .run(username, password)
-  const userId = result.lastInsertRowid
+  const user = await db.user.create({ data: { username, password } })
 
   if (role_id) {
-    const role = db.prepare('SELECT id FROM roles WHERE id = ?').get(role_id)
+    const roleId = Number(role_id)
+    const role = await db.role.findUnique({ where: { id: roleId } })
     if (role) {
-      db.prepare('INSERT INTO user_roles (user_id, role_id) VALUES (?, ?)').run(
-        userId,
-        role_id
-      )
+      await db.userRole.create({ data: { userId: user.id, roleId } })
     }
   }
 
-  res.json({ success: true, user: { id: userId, username } })
+  res.json({ success: true, user: { id: user.id, username } })
 })
 
-router.delete('/users/:id', requireAuth, (req, res) => {
+router.delete('/users/:id', requireAuth, async (req, res) => {
   const id = Number(req.params.id)
 
   if (id === req.session.user!.id) {
@@ -64,20 +69,19 @@ router.delete('/users/:id', requireAuth, (req, res) => {
     return
   }
 
-  db.prepare('DELETE FROM users WHERE id = ?').run(id)
+  await db.user.delete({ where: { id } })
   res.json({ success: true })
 })
 
-router.put('/users/:id/role', requireAuth, (req, res) => {
+router.put('/users/:id/role', requireAuth, async (req, res) => {
   const userId = Number(req.params.id)
   const { role_id } = req.body
 
-  db.prepare('DELETE FROM user_roles WHERE user_id = ?').run(userId)
+  await db.userRole.deleteMany({ where: { userId } })
   if (role_id) {
-    db.prepare('INSERT INTO user_roles (user_id, role_id) VALUES (?, ?)').run(
-      userId,
-      role_id
-    )
+    await db.userRole.create({
+      data: { userId, roleId: Number(role_id) },
+    })
   }
 
   res.json({ success: true })

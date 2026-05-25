@@ -1,11 +1,11 @@
 [
-  { "label": "Dashboard", "path": "/" },
+  { "label": "Dashboard", "path": "/", "actions": ["view"] },
   {
     "label": "Management",
     "children": [
-      { "label": "Users", "path": "/management/users" },
-      { "label": "Roles", "path": "/management/roles" }
+      { "label": "Users", "path": "/management/users", "actions": ["view", "create", "edit", "delete", "approve"] },
+      { "label": "Roles", "path": "/management/roles", "actions": ["view", "create", "edit", "delete"] }
     ]
   },
-  { "label": "Settings", "path": "/settings" }
+  { "label": "Settings", "path": "/settings", "actions": ["view", "edit", "submit", "tab"] }
 ]

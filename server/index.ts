@@ -8,8 +8,8 @@ import { initSchema, seed } from './schema.js'
 import routes from './routes/index.js'
 import { getFullUser } from './services/rbac.js'
 
-initSchema()
-seed()
+await initSchema()
+await seed()
 
 const app = express()
 app.use(express.json())
@@ -29,7 +29,7 @@ if (IS_DEV) {
       const template = fs.readFileSync(INDEX_HTML, 'utf-8')
       const { render } = await vite.ssrLoadModule('/src/entry-server.ts')
       const userData = req.session?.user
-        ? getFullUser(req.session.user.id)
+        ? await getFullUser(req.session.user.id)
         : null
       const { html, auth: authState } = await render(req.originalUrl, {
         user: userData,
@@ -54,7 +54,7 @@ if (IS_DEV) {
       )
       const { render } = await import(SERVER_BUNDLE)
       const userData = req.session?.user
-        ? getFullUser(req.session.user.id)
+        ? await getFullUser(req.session.user.id)
         : null
       const { html, auth: authState } = await render(req.originalUrl, {
         user: userData,

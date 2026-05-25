@@ -3,7 +3,7 @@ import { renderToString } from 'vue/server-renderer'
 
 export async function render(
   url: string,
-  context?: { user?: { id: number; username: string; role: { id: number; name: string } | null; menus: { label: string; path: string }[] } | null }
+  context?: { user?: { id: number; username: string; role: { id: number; name: string } | null; menus: { label: string; path?: string; children?: any[]; allowedActions?: string[] }[] } | null }
 ) {
   const { app, router, auth } = createApp()
 

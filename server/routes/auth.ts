@@ -4,11 +4,12 @@ import { getFullUser } from '../services/rbac.js'
 
 const router = Router()
 
-router.post('/login', (req, res) => {
+router.post('/login', async (req, res) => {
   const { username, password } = req.body
-  const user = db
-    .prepare('SELECT id, username FROM users WHERE username = ? AND password = ?')
-    .get(username, password) as any
+  const user = await db.user.findFirst({
+    where: { username, password },
+    select: { id: true, username: true },
+  })
 
   if (!user) {
     res.status(401).json({ success: false, message: 'Invalid credentials' })
@@ -16,7 +17,7 @@ router.post('/login', (req, res) => {
   }
 
   req.session.user = { id: user.id, username: user.username }
-  const full = getFullUser(user.id)
+  const full = await getFullUser(user.id)
   res.json({ success: true, user: full })
 })
 
@@ -26,12 +27,12 @@ router.post('/logout', (req, res) => {
   })
 })
 
-router.get('/me', (req, res) => {
+router.get('/me', async (req, res) => {
   if (!req.session.user) {
     res.status(401).json({ user: null })
     return
   }
-  const full = getFullUser(req.session.user.id)
+  const full = await getFullUser(req.session.user.id)
   res.json({ user: full })
 })
 

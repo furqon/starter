@@ -2,49 +2,74 @@ import db from '../db.js'
 import { getNavbarConfig, filterMenuItems, markChecked } from './navbar.js'
 import type { FullUser, MenuItem } from '../types.js'
 
-function getRoleId(userId: number): number | null {
-  const row = db
-    .prepare('SELECT role_id FROM user_roles WHERE user_id = ?')
-    .get(userId) as any
-  return row?.role_id ?? null
+async function getAllowedMenus(roleId: number): Promise<Map<string, string[]>> {
+  const rows = await db.roleMenu.findMany({
+    where: { roleId },
+    select: { menuPath: true, actions: true },
+  })
+  const map = new Map<string, string[]>()
+  for (const row of rows) {
+    map.set(row.menuPath, (row.actions as string[]) ?? [])
+  }
+  return map
 }
 
-function getAllowedPaths(roleId: number): string[] {
-  const rows = db
-    .prepare('SELECT menu_path FROM role_menus WHERE role_id = ?')
-    .all(roleId) as any[]
-  return rows.map((r) => r.menu_path)
+function getMenuActionsMap(items: MenuItem[]): Map<string, string[]> {
+  const map = new Map<string, string[]>()
+  function walk(list: MenuItem[]) {
+    for (const item of list) {
+      if (item.children) {
+        walk(item.children)
+      } else if (item.path) {
+        map.set(item.path, item.actions ?? [])
+      }
+    }
+  }
+  walk(items)
+  return map
 }
 
-export function getUserRole(
+async function getRoleId(userId: number): Promise<number | null> {
+  const row = await db.userRole.findFirst({
+    where: { userId },
+    select: { roleId: true },
+  })
+  return row?.roleId ?? null
+}
+
+export async function getUserRole(
   userId: number
-): { id: number; name: string } | null {
-  const row = db
-    .prepare(
-      'SELECT r.id, r.name FROM user_roles ur JOIN roles r ON r.id = ur.role_id WHERE ur.user_id = ?'
-    )
-    .get(userId) as any
-  return row ?? null
+): Promise<{ id: number; name: string } | null> {
+  const row = await db.userRole.findFirst({
+    where: { userId },
+    select: { role: { select: { id: true, name: true } } },
+  })
+  return row?.role ?? null
 }
 
-export function getUserMenus(userId: number): MenuItem[] {
-  const roleId = getRoleId(userId)
+export async function getUserMenus(userId: number): Promise<MenuItem[]> {
+  const roleId = await getRoleId(userId)
   if (!roleId) return []
-  const paths = getAllowedPaths(roleId)
-  return filterMenuItems(getNavbarConfig(), new Set(paths))
+  const allowedMenus = await getAllowedMenus(roleId)
+  return filterMenuItems(getNavbarConfig(), allowedMenus)
 }
 
-export function getFullUser(userId: number): FullUser | null {
-  const user = db
-    .prepare('SELECT id, username FROM users WHERE id = ?')
-    .get(userId) as any
+export async function getFullUser(userId: number): Promise<FullUser | null> {
+  const user = await db.user.findUnique({
+    where: { id: userId },
+    select: { id: true, username: true },
+  })
   if (!user) return null
-  const role = getUserRole(user.id)
-  const menus = getUserMenus(user.id)
+  const role = await getUserRole(user.id)
+  const menus = await getUserMenus(user.id)
   return { id: user.id, username: user.username, role, menus }
 }
 
-export function getRoleMenusWithChecked(roleId: number): MenuItem[] {
-  const paths = getAllowedPaths(roleId)
-  return markChecked(getNavbarConfig(), new Set(paths))
+export async function getRoleMenusWithChecked(
+  roleId: number
+): Promise<MenuItem[]> {
+  const roleActions = await getAllowedMenus(roleId)
+  const masterItems = getNavbarConfig()
+  const menuActions = getMenuActionsMap(masterItems)
+  return markChecked(masterItems, roleActions, menuActions)
 }

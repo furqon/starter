@@ -44,7 +44,7 @@
       class="fixed inset-0 bg-black/20 flex items-center justify-center z-50"
       @click.self="editTarget = null"
     >
-      <div class="bg-white rounded-lg border border-gray-200 p-5 w-full max-w-sm mx-4 shadow-lg">
+      <div class="bg-white rounded-lg border border-gray-200 p-5 w-full max-w-sm mx-4 shadow-lg max-h-[90vh] overflow-y-auto">
         <h2 class="text-sm font-semibold text-gray-900 mb-4">
           {{ editTarget.id ? 'Edit Role' : 'Add Role' }}
         </h2>
@@ -66,9 +66,15 @@
             />
           </div>
           <div>
-            <label class="block text-xs font-medium text-gray-600 mb-2">Menu Access</label>
-            <div class="max-h-48 overflow-y-auto border border-gray-100 rounded-md p-2">
-              <MenuTree :items="masterMenus" :selected="editPaths" @toggle="togglePath" />
+            <label class="block text-xs font-medium text-gray-600 mb-2">Menu & Action Access</label>
+            <div class="max-h-64 overflow-y-auto border border-gray-100 rounded-md p-2">
+              <MenuTree
+                :items="masterMenus"
+                :menu-actions="masterMenuActions"
+                :selected-actions="editActions"
+                @toggle-menu="toggleMenu"
+                @toggle-action="toggleAction"
+              />
             </div>
           </div>
           <p v-if="editError" class="text-red-500 text-xs">{{ editError }}</p>
@@ -97,12 +103,37 @@
 import { ref, onMounted } from 'vue'
 import MenuTree from './MenuTree.vue'
 
+interface MenuActionItem {
+  label: string
+  path?: string
+  children?: MenuActionItem[]
+  actions?: string[]
+  allowedActions?: string[]
+  checked?: boolean
+}
+
 const roles = ref<any[]>([])
-const masterMenus = ref<any[]>([])
+const masterMenus = ref<MenuActionItem[]>([])
+const masterMenuActions = ref<Record<string, string[]>>({})
 const editTarget = ref<any>(null)
 const editForm = ref({ name: '', description: '' })
-const editPaths = ref<string[]>([])
+const editActions = ref<Record<string, string[]>>({})
 const editError = ref('')
+
+function collectMenuActions(items: MenuActionItem[]): Record<string, string[]> {
+  const actions: Record<string, string[]> = {}
+  function walk(list: MenuActionItem[]) {
+    for (const item of list) {
+      if (item.children) {
+        walk(item.children)
+      } else if (item.path && item.actions) {
+        actions[item.path] = item.actions
+      }
+    }
+  }
+  walk(items)
+  return actions
+}
 
 async function load() {
   const [rRes, mRes] = await Promise.all([
@@ -110,7 +141,10 @@ async function load() {
     fetch('/api/navbar-config'),
   ])
   if (rRes.ok) roles.value = (await rRes.json()).roles
-  if (mRes.ok) masterMenus.value = (await mRes.json()).items
+  if (mRes.ok) {
+    masterMenus.value = (await mRes.json()).items
+    masterMenuActions.value = collectMenuActions(masterMenus.value)
+  }
 }
 
 async function openEdit(role: any) {
@@ -121,31 +155,49 @@ async function openEdit(role: any) {
     const res = await fetch(`/api/roles/${role.id}/menus`)
     if (res.ok) {
       const data = await res.json()
-      editPaths.value = collectChecked(data.items)
+      const actions: Record<string, string[]> = {}
+      function walk(items: MenuActionItem[]) {
+        for (const item of items) {
+          if (item.children) {
+            walk(item.children)
+          } else if (item.checked && item.path) {
+            actions[item.path] = item.allowedActions ?? []
+          }
+        }
+      }
+      walk(data.items)
+      editActions.value = actions
     }
   } else {
     editTarget.value = { id: null }
     editForm.value = { name: '', description: '' }
-    editPaths.value = []
+    editActions.value = {}
   }
 }
 
-function collectChecked(items: any[]): string[] {
-  const paths: string[] = []
-  for (const item of items) {
-    if (item.children) {
-      paths.push(...collectChecked(item.children))
-    } else if (item.checked) {
-      paths.push(item.path)
+function toggleMenu(path: string) {
+  if (path in editActions.value) {
+    const { [path]: _, ...rest } = editActions.value
+    editActions.value = rest
+  } else {
+    const available = masterMenuActions.value[path] ?? []
+    editActions.value = { ...editActions.value, [path]: [...available] }
+  }
+}
+
+function toggleAction(path: string, action: string) {
+  const current = editActions.value[path] ?? []
+  if (current.includes(action)) {
+    const filtered = current.filter((a: string) => a !== action)
+    if (filtered.length === 0) {
+      const { [path]: _, ...rest } = editActions.value
+      editActions.value = rest
+    } else {
+      editActions.value = { ...editActions.value, [path]: filtered }
     }
+  } else {
+    editActions.value = { ...editActions.value, [path]: [...current, action] }
   }
-  return paths
-}
-
-function togglePath(path: string) {
-  const idx = editPaths.value.indexOf(path)
-  if (idx === -1) editPaths.value.push(path)
-  else editPaths.value.splice(idx, 1)
 }
 
 async function saveRole() {
@@ -154,6 +206,12 @@ async function saveRole() {
     editError.value = 'Name is required'
     return
   }
+
+  const menus = Object.entries(editActions.value).map(([path, actions]) => ({
+    path,
+    actions,
+  }))
+
   if (editTarget.value.id) {
     const res = await fetch(`/api/roles/${editTarget.value.id}`, {
       method: 'PUT',
@@ -164,7 +222,7 @@ async function saveRole() {
     await fetch(`/api/roles/${editTarget.value.id}/menus`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ paths: editPaths.value }),
+      body: JSON.stringify({ menus }),
     })
   } else {
     const res = await fetch('/api/roles', {
@@ -177,7 +235,7 @@ async function saveRole() {
     await fetch(`/api/roles/${data.role.id}/menus`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ paths: editPaths.value }),
+      body: JSON.stringify({ menus }),
     })
   }
   editTarget.value = null

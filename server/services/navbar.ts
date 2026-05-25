@@ -3,8 +3,8 @@ import { NAVBAR_PATH } from '../config.js'
 import type { MenuItem } from '../types.js'
 
 const defaults: MenuItem[] = [
-  { label: 'Dashboard', path: '/' },
-  { label: 'Settings', path: '/settings' },
+  { label: 'Dashboard', path: '/', actions: ['view'] },
+  { label: 'Settings', path: '/settings', actions: ['view', 'edit'] },
   { label: 'Management', path: '/management' },
 ]
 
@@ -22,17 +22,21 @@ export function saveNavbarConfig(items: MenuItem[]): void {
 
 export function filterMenuItems(
   items: MenuItem[],
-  allowed: Set<string>
+  allowedMenus: Map<string, string[]>
 ): MenuItem[] {
   const result: MenuItem[] = []
   for (const item of items) {
     if (item.children) {
-      const filtered = filterMenuItems(item.children, allowed)
+      const filtered = filterMenuItems(item.children, allowedMenus)
       if (filtered.length > 0) {
         result.push({ label: item.label, children: filtered })
       }
-    } else if (item.path && allowed.has(item.path)) {
-      result.push({ ...item })
+    } else if (item.path && allowedMenus.has(item.path)) {
+      const allowedActions = allowedMenus.get(item.path)!
+      result.push({
+        ...item,
+        allowedActions,
+      })
     }
   }
   return result
@@ -52,12 +56,23 @@ export function collectLeafPaths(items: MenuItem[]): string[] {
 
 export function markChecked(
   items: MenuItem[],
-  allowed: Set<string>
+  roleActions: Map<string, string[]>,
+  menuActions: Map<string, string[]>
 ): MenuItem[] {
   return items.map((item) => {
     if (item.children) {
-      return { label: item.label, children: markChecked(item.children, allowed) }
+      return {
+        label: item.label,
+        children: markChecked(item.children, roleActions, menuActions),
+      }
     }
-    return { ...item, checked: allowed.has(item.path ?? '') }
+    const path = item.path ?? ''
+    const checkedActions = roleActions.get(path) ?? []
+    return {
+      ...item,
+      checked: roleActions.has(path),
+      actions: menuActions.get(path) ?? [],
+      allowedActions: checkedActions,
+    }
   })
 }

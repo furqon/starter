@@ -5,8 +5,8 @@ import { requireAuth } from '../middleware.js'
 
 const router = Router()
 
-router.get('/navbar', requireAuth, (req, res) => {
-  const menus = getUserMenus(req.session.user!.id)
+router.get('/navbar', requireAuth, async (req, res) => {
+  const menus = await getUserMenus(req.session.user!.id)
   res.json({ items: menus })
 })
 
